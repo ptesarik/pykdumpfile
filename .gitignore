@@ -1,0 +1,14 @@
+# Generated cffi code
+_addrxlat.*
+_kdumpfile.*
+
+# Object files
+*.o
+*.so
+
+# Python bytecode
+*.pyc
+
+# Editor backup files
+*~
+
