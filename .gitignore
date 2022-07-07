@@ -9,6 +9,10 @@ _kdumpfile.*
 # Python bytecode
 *.pyc
 
+# Python distribution
+/dist/
+*.egg-info
+
 # Editor backup files
 *~
 
