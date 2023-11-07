@@ -27,7 +27,7 @@
 
 /* The rest of this file is adapted from the public header.
  * Matching libkdumpfile commit:
- * 62c0ecf9a10358036b0205c52a74cf441521e4d8
+ * 2430f0968bb5b8c628142fe545b22cbedadacdf5
  */
 
 #define ADDRXLAT_VER_MAJOR	...
@@ -85,27 +85,17 @@ const char *addrxlat_ctx_get_err(const addrxlat_ctx_t *ctx);
 
 typedef struct _addrxlat_cb addrxlat_cb_t;
 
-typedef void addrxlat_cb_hook_fn(void *data, addrxlat_cb_t *cb);
-
-typedef enum _addrxlat_sym_type {
-	ADDRXLAT_SYM_REG,
-	ADDRXLAT_SYM_VALUE,
-	ADDRXLAT_SYM_SIZEOF,
-	ADDRXLAT_SYM_OFFSETOF,
-	ADDRXLAT_SYM_NUMBER,
-} addrxlat_sym_type_t;
-
-#define ADDRXLAT_SYM_ARGC_MAX	2
-
-int addrxlat_sym_argc(addrxlat_sym_type_t type);
-
-typedef struct _addrxlat_sym {
-	addrxlat_addr_t val;
-	addrxlat_sym_type_t type;
-	const char *args[ADDRXLAT_SYM_ARGC_MAX];
-} addrxlat_sym_t;
-
-typedef addrxlat_status addrxlat_sym_fn(void *data, addrxlat_sym_t *sym);
+typedef addrxlat_status addrxlat_cb_reg_value_fn(
+	const addrxlat_cb_t *cb, const char *name, addrxlat_addr_t *val);
+typedef addrxlat_status addrxlat_cb_sym_value_fn(
+	const addrxlat_cb_t *cb, const char *name, addrxlat_addr_t *val);
+typedef addrxlat_status addrxlat_cb_sym_sizeof_fn(
+	const addrxlat_cb_t *cb, const char *name, addrxlat_addr_t *val);
+typedef addrxlat_status addrxlat_cb_sym_offsetof_fn(
+	const addrxlat_cb_t *cb, const char *obj, const char *elem,
+	addrxlat_addr_t *val);
+typedef addrxlat_status addrxlat_cb_num_value_fn(
+	const addrxlat_cb_t *cb, const char *name, addrxlat_addr_t *val);
 
 typedef enum _addrxlat_byte_order {
 	ADDRXLAT_BIG_ENDIAN,
@@ -114,34 +104,41 @@ typedef enum _addrxlat_byte_order {
 	ADDRXLAT_HOST_ENDIAN = -1
 } addrxlat_byte_order_t;
 
-typedef struct _addrxlat_buffer {
+typedef struct _addrxlat_buffer addrxlat_buffer_t;
+
+typedef void addrxlat_put_page_fn(const addrxlat_buffer_t *buf);
+
+struct _addrxlat_buffer {
 	addrxlat_fulladdr_t addr;
 	const void *ptr;
 	size_t size;
 	addrxlat_byte_order_t byte_order;
+	addrxlat_put_page_fn *put_page;
 	void *priv;
-} addrxlat_buffer_t;
+};
 
 typedef addrxlat_status addrxlat_get_page_fn(
-	void *data, addrxlat_buffer_t *buf);
+	const addrxlat_cb_t *cb, addrxlat_buffer_t *buf);
 
-typedef void addrxlat_put_page_fn(
-	void *data, const addrxlat_buffer_t *buf);
-
-struct _addrxlat_cb {
-	void *data;
-	addrxlat_cb_hook_fn *cb_hook;
-	addrxlat_sym_fn *sym;
-	addrxlat_get_page_fn *get_page;
-	addrxlat_put_page_fn *put_page;
-	unsigned long read_caps;
-};
+typedef unsigned long addrxlat_read_caps_fn(const addrxlat_cb_t *cb);
 
 unsigned long ADDRXLAT_CAPS(unsigned val);
 
-void addrxlat_ctx_set_cb(addrxlat_ctx_t *ctx, const addrxlat_cb_t *cb);
+struct _addrxlat_cb {
+	const addrxlat_cb_t *next;
+	void *priv;
+	addrxlat_get_page_fn *get_page;
+	addrxlat_read_caps_fn *read_caps;
+	addrxlat_cb_reg_value_fn *reg_value;
+	addrxlat_cb_sym_value_fn *sym_value;
+	addrxlat_cb_sym_sizeof_fn *sym_sizeof;
+	addrxlat_cb_sym_offsetof_fn *sym_offsetof;
+	addrxlat_cb_num_value_fn *num_value;
+};
+
+addrxlat_cb_t *addrxlat_ctx_add_cb(addrxlat_ctx_t *ctx);
+void addrxlat_ctx_del_cb(addrxlat_ctx_t *ctx, addrxlat_cb_t *cb);
 const addrxlat_cb_t *addrxlat_ctx_get_cb(const addrxlat_ctx_t *ctx);
-addrxlat_cb_t *addrxlat_ctx_get_ecb(addrxlat_ctx_t *ctx);
 
 typedef enum _addrxlat_kind {
 	ADDRXLAT_NOMETH,
@@ -170,6 +167,7 @@ typedef struct _addrxlat_param_linear {
 } addrxlat_param_linear_t;
 
 typedef enum _addrxlat_pte_format {
+	ADDRXLAT_PTE_INVALID = -1,
 	ADDRXLAT_PTE_NONE,
 	ADDRXLAT_PTE_PFN32,
 	ADDRXLAT_PTE_PFN64,
@@ -179,7 +177,13 @@ typedef enum _addrxlat_pte_format {
 	ADDRXLAT_PTE_X86_64,
 	ADDRXLAT_PTE_S390X,
 	ADDRXLAT_PTE_PPC64_LINUX_RPN30,
+	ADDRXLAT_PTE_AARCH64_LPA,
+	ADDRXLAT_PTE_AARCH64_LPA2,
+	ADDRXLAT_PTE_ARM,
 } addrxlat_pte_format_t;
+
+const char *addrxlat_pte_format_name(addrxlat_pte_format_t fmt);
+addrxlat_pte_format_t addrxlat_pte_format(const char *name);
 
 int addrxlat_pteval_shift(addrxlat_pte_format_t fmt);
 

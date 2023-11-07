@@ -60,24 +60,40 @@ def _cb_ctx_error(exc, val, tb):
     if tb is None:
         # happens if there was an error converting the return value
         return ERR_CFFI_CONV
-    ctx = ffi.from_handle(tb.tb_frame.f_locals['data'])
+    ctx = ffi.from_handle(tb.tb_frame.f_locals['cb'].priv)
     return _ctx_error(ctx, exc, val, tb)
 
 @ffi.def_extern(onerror=_cb_ctx_error, error=ERR_PYEXC)
-def _cb_sym(data, sym):
-    return ffi.from_handle(data)._cb_sym(sym)
+def _cb_reg_value(cb, name, val):
+    return ffi.from_handle(cb.priv)._cb_reg_value(name, val)
 
 @ffi.def_extern(onerror=_cb_ctx_error, error=ERR_PYEXC)
-def _cb_get_page(data, buf):
-    return ffi.from_handle(data)._cb_get_page(buf)
+def _cb_sym_value(cb, name, val):
+    return ffi.from_handle(cb.priv)._cb_sym_value(name, val)
+
+@ffi.def_extern(onerror=_cb_ctx_error, error=ERR_PYEXC)
+def _cb_sym_sizeof(cb, name, val):
+    return ffi.from_handle(cb.priv)._cb_sym_sizeof(name, val)
+
+@ffi.def_extern(onerror=_cb_ctx_error, error=ERR_PYEXC)
+def _cb_sym_offsetof(cb, obj, elem, val):
+    return ffi.from_handle(cb.priv)._cb_sym_offsetof(obj, elem, val)
+
+@ffi.def_extern(onerror=_cb_ctx_error, error=ERR_PYEXC)
+def _cb_num_value(cb, name, val):
+    return ffi.from_handle(cb.priv)._cb_num_value(name, val)
+
+@ffi.def_extern(onerror=_cb_ctx_error, error=ERR_PYEXC)
+def _cb_get_page(cb, buf):
+    return ffi.from_handle(cb.priv)._cb_get_page(buf)
+
+@ffi.def_extern(onerror=_cb_ctx_error, error=0)
+def _cb_read_caps(cb):
+    return ffi.from_handle(cb.priv)._cb_read_caps()
 
 @ffi.def_extern()
-def _cb_put_page(data, buf):
-    return ffi.from_handle(data)._cb_put_page(buf)
-
-@ffi.def_extern()
-def _cb_hook(data, cb):
-    return ffi.from_handle(data)._cb_hook(cb)
+def _cb_put_page(buf):
+    ffi.from_handle(buf.priv)._cb_put_page()
 
 def _cb_meth_error(exc, val, tb):
     if tb is None:
@@ -124,19 +140,25 @@ class Context(object):
             C.addrxlat_ctx_incref(ptr)
 
         self._cdata = ptr
-        self._internal_buffer = ffi.new('addrxlat_buffer_t*')
-        self.page_buffer = self._internal_buffer
-        self._own_pages = dict()
         self._exc = None
         self._exc_val = None
         self._exc_tb = None
-        self._next_cb = ffi.new('addrxlat_cb_t*')
-        self._install_cb_hook(C.addrxlat_ctx_get_ecb(self._cdata))
+        self._handle = ffi.new_handle(self)
+        self._cb = C.addrxlat_ctx_add_cb(self._cdata)
+        self._cb.priv = self._handle
+        self._cb.get_page = C._cb_get_page
+        self._cb.read_caps = C._cb_read_caps
+        self._cb.reg_value = C._cb_reg_value
+        self._cb.sym_value = C._cb_sym_value
+        self._cb.sym_sizeof = C._cb_sym_sizeof
+        self._cb.sym_offsetof = C._cb_sym_offsetof
+        self._cb.num_value = C._cb_num_value
+        self.read_caps = None
 
     def __del__(self):
         ctx = self._cdata
         self._cdata = ffi.NULL
-        C.addrxlat_ctx_set_cb(ctx, C.addrxlat_ctx_get_cb(ctx))
+        C.addrxlat_ctx_del_cb(ctx, self._cb)
         C.addrxlat_ctx_decref(ctx)
 
     def __eq__(self, other):
@@ -144,20 +166,6 @@ class Context(object):
 
     def __ne__(self, other):
         return not self == other
-
-    @property
-    def read_caps(self):
-        '''read callback capabilities
-
-        A bitmask of address spaces accepted by the read callback.'''
-        cb = C.addrxlat_ctx_get_cb(self._cdata)
-        return cb.read_caps
-
-    @read_caps.setter
-    def read_caps(self, value):
-        cb = C.addrxlat_ctx_get_cb(self._cdata)
-        cb.read_caps = value
-        C.addrxlat_ctx_set_cb(self._cdata, cb)
 
     def err(self, status, str):
         '''CTX.err(status, str) -> status
@@ -191,124 +199,201 @@ class Context(object):
         self._exc_tb = exc_tb
         return result
 
-    def _cb_null(self):
-        '''Set error result if callback function is NULL.'''
-        return C.addrxlat_ctx_err(self._cdata, ERR_NODATA, b'NULL callback')
-
-    def _cb_hook(self, cb):
-        if self._next_cb.cb_hook:
-            self._next_cb.cb_hook(self._next_cb.data, cb)
-
-        if self._cdata:
-            self._install_cb_hook(cb)
-
-    def _install_cb_hook(self, cb):
-        self._next_cb[0] = cb[0]
-        self._handle = ffi.new_handle(self)
-        cb.data = self._handle
-        cb.cb_hook = C._cb_hook
-        cb.sym = C._cb_sym
-        cb.get_page = C._cb_get_page
-        cb.put_page = C._cb_put_page
-
-    def _cb_sym(self, sym):
-        argc = C.addrxlat_sym_argc(sym.type)
-        if argc == -1:
-            raise NotImplementedError('Unknown symbolic info type: {}'.format(sym.type))
-
-        args = tuple(ffi.string(arg) for arg in sym.args[0:argc])
-        sym.val = self.cb_sym(sym.type, *args)
+    def _cb_reg_value(self, name, val):
+        val[0] = self.cb_reg_value(ffi.string(name))
         return OK
 
-    def cb_sym(self, type, *args):
-        '''CTX.cb_sym(type, *args) -> value
+    def cb_reg_value(self, name):
+        '''CTX.cb_reg_value(name) -> val
 
-        Callback function to resolve symbolic information. The function
-        can be called as:
+        Callback function to get register value by name.'''
+        return self.next_cb_reg_value(name)
 
-          - CTX.cb_sym(SYM_REG, regname) -> register value
-          - CTX.cb_sym(SYM_VALUE, symname) -> symbol value
-          - CTX.cb_sym(SYM_SIZEOF, symname) -> size
-          - CTX.cb_sym(SYM_OFFSETOF, typename, member) -> offset'''
-        return self.next_cb_sym(type, *args)
+    def next_cb_reg_value(self, name):
+        '''CTX.next_cb_reg_value(name) -> val
 
-    def next_cb_sym(self, type, *args):
-        '''CTX.next_cb_sym(type, *args) -> value\n\
+        Call the next callback to get register value.'''
+        val = ffi.new('addrxlat_addr_t*')
+        status = self._cb.next.reg_value(self._cb.next, utils.to_bytes(name), val)
+        return _status_result(self, status, val[0])
 
-        Call the next symbolic information callback.'''
+    def _cb_sym_value(self, name, val):
+        val[0] = self.cb_sym_value(ffi.string(name))
+        return OK
 
-        self.clear_err()
-        if not self._next_cb.sym:
-            raise NoDataError('NULL callback')
+    def cb_sym_value(self, name):
+        '''CTX.cb_sym_value(name) -> val
 
-        if len(args) < 1:
-            raise TypeError('{}() takes at least one argument'.format('next_cb_sym'))
+        Callback function to get symbol value by name.'''
+        return self.next_cb_sym_value(name)
 
-        symargc = C.addrxlat_sym_argc(type)
-        if symargc < 0:
-            raise NotImplementedError('Unknown symbolic info type: {}'.format(type))
-        if len(args) != symargc + 1:
-            raise TypeError('{}({}, ...) requires exactly {} arguments'.format("next_cb_sym", args[0], symargc + 1))
+    def next_cb_sym_value(self, name):
+        '''CTX.next_cb_sym_value(name) -> val
 
-        sym = ffi.new('addrxlat_sym_t*')
-        sym.type = type
-        sym.args = (utils.to_bytes(arg) for arg in args)
-        status = self._next_cb.sym(self._next_cb.data, sym)
-        return _status_result(self, status, sym.val)
+        Call the next callback to get symbol value.'''
+        val = ffi.new('addrxlat_addr_t*')
+        status = self._cb.next.sym_value(self._cb.next, utils.to_bytes(name), val)
+        return _status_result(self, status, val[0])
+
+    def _cb_sym_sizeof(self, name, val):
+        val[0] = self.cb_sym_sizeof(ffi.string(name))
+        return OK
+
+    def cb_sym_sizeof(self, name):
+        '''CTX.cb_sym_sizeof(name) -> val
+
+        Callback function to get symbol size by name.'''
+        return self.next_cb_sym_sizeof(name)
+
+    def next_cb_sym_sizeof(self, name):
+        '''CTX.next_cb_sym_sizeof(name) -> val
+
+        Call the next callback to get symbol size.'''
+        val = ffi.new('addrxlat_addr_t*')
+        status = self._cb.next.sym_sizeof(self._cb.next, utils.to_bytes(name), val)
+        return _status_result(self, status, val[0])
+
+    def _cb_sym_offsetof(self, obj, elem, val):
+        val[0] = self.cb_sym_offsetof(ffi.string(obj), ffi.string(elem))
+        return OK
+
+    def cb_sym_offsetof(self, obj, elem):
+        '''CTX.cb_sym_offsetof(obj, elem) -> val
+
+        Callback function to get element offset within object.'''
+        return self.next_cb_sym_offsetof(obj, elem)
+
+    def next_cb_sym_offsetof(self, obj, elem):
+        '''CTX.next_cb_sym_offsetof(obj, elem) -> val
+
+        Call the next callback to get element offset within object.'''
+        val = ffi.new('addrxlat_addr_t*')
+        status = self._cb.next.sym_offsetof(self._cb.next, utils.to_bytes(obj),
+                                            utils.to_bytes(elem), val)
+        return _status_result(self, status, val[0])
+
+    def _cb_num_value(self, name, val):
+        val[0] = self.cb_num_value(ffi.string(name))
+        return OK
+
+    def cb_num_value(self, name):
+        '''CTX.cb_num_value(name) -> val
+
+        Callback function to get number value by name.'''
+        return self.next_cb_num_value(name)
+
+    def next_cb_num_value(self, name):
+        '''CTX.next_cb_num_value(name) -> val
+
+        Call the next callback to get number value.'''
+        val = ffi.new('addrxlat_addr_t*')
+        status = self._cb.next.num_value(self._cb.next, utils.to_bytes(name), val)
+        return _status_result(self, status, val[0])
 
     def _cb_get_page(self, buf):
-        saved_buffer = self.page_buffer
-        try:
-            self.page_buffer = buf
-            addr = FullAddressFromCData(buf.addr)
-            data, byte_order = self.cb_get_page(addr)
-            buf.addr = addr._cdata[0]
-            cdata = ffi.from_buffer(data)
-            buf.ptr = cdata
-            buf.size = len(cdata)
-            buf.byte_order = byte_order
-            self._own_pages[buf.ptr] = data
-            return OK
-        finally:
-            self.page_buffer = saved_buffer
+        self.cb_get_page(Buffer(buf))
+        return OK
 
-    def cb_get_page(self, fulladdr):
-        '''CTX.cb_get_page(fulladdr) -> (data, byte_order)
+    def cb_get_page(self, buf):
+        '''CTX.cb_get_page(buf)
 
-        Callback function to read a page at a given address. The first element
-        of the return tuple must implement the buffer protocol.'''
-        return self.next_cb_get_page(fulladdr)
+        Callback function to read a page at a given address. Update the Buffer
+        object passed as parameter.'''
+        return self.next_cb_get_page(buf)
 
-    def next_cb_get_page(self, fulladdr):
-        '''CTX.next_cb_get_page(fulladdr) -> (data, byte_order)
+    def next_cb_get_page(self, buf):
+        '''CTX.next_cb_get_page(buf)
 
         Call the next callback to read a page.'''
+        status = self._cb.next.get_page(self._cb.next, buf._cdata)
+        return _status_result(self, status, None)
 
-        self.clear_err()
-        if not self._next_cb.get_page:
-            raise NoDataError('NULL callback')
+    def _cb_read_caps(self):
+        return self.cb_read_caps()
 
-        buf = self.page_buffer
-        buf.addr = fulladdr._cdata
-        status = self._next_cb.get_page(self._next_cb.data, buf)
-        return (ffi.buffer(buf.ptr, buf.size), buf.byte_order)
+    def cb_read_caps(self):
+        '''CTX.cb_read_caps() -> read_caps
 
-    def _cb_put_page(self, buf):
-        saved_buffer = self.page_buffer
-        try:
-            self.page_buffer = buf
-            data = self._own_pages.pop(buf.ptr, None)
-            if data is not None:
-                self.put_page(data)
-        finally:
-            self.page_buffer = saved_buffer
+        Callback function to get a bitmask of address spaces accepted by
+        CTX.cb_read_page(). Returns CTX.read_caps if not None, otherwise
+        calls CTX.next_cb_read_caps().'''
+        if self.read_caps is not None:
+            return self.read_caps
+        return self.next_cb_read_caps()
 
-    def cb_put_page(self, data):
-        '''CTX.cb_put_page(data)
+    def next_cb_read_caps(self):
+        '''CTX.next_cb_read_caps()
+
+        Call the next read capabilities callback.'''
+        return self._cb.next.read_caps(self._cb.next)
+
+###
+### addrxlat_buffer_t
+###
+
+class Buffer(object):
+    '''Buffer([ptr]) -> buf
+
+    Wrapper for cdata addrxlat_buffer_t *.
+    If ptr is omitted, allocate a new buffer.'''
+
+    def __init__(self, ptr=None):
+        if ptr is None:
+            ptr = ffi.new('addrxlat_buffer_t*')
+            if not ptr:
+                raise MemoryError('Could not allocate addrxlat_buffer_t')
+
+        self._cdata = ptr
+        self._handle = ffi.new_handle(self)
+        self._cdata.put_page = C._cb_put_page
+        self._cdata.priv = self._handle
+        self._data = None
+
+    @property
+    def addr(self):
+        '''address (FullAddress)'''
+        return FullAddressFromCData(self._cdata.addr)
+
+    @addr.setter
+    def addr(self, value):
+        self._cdata.addr = value._cdata[0]
+
+    @property
+    def data(self):
+        '''raw binary data'''
+        if self._cdata.ptr == ffi.NULL:
+            return None
+        return ffi.buffer(self._cdata.ptr, self._cdata.size)
+
+    @data.setter
+    def data(self, value):
+        self._data = value
+        if value is None:
+            self._cdata.ptr = ffi.NULL
+            self._cdata.size = 0
+        else:
+            cdata = ffi.from_buffer(value)
+            self._cdata.ptr = cdata
+            self._cdata.size = len(cdata)
+
+    @property
+    def byte_order(self):
+        '''byte order'''
+        return self._cdata.byte_order
+
+    @byte_order.setter
+    def byte_order(self, value):
+        self._cdata.byte_order = value
+
+    def _cb_put_page(self):
+        self.cb_put_page()
+
+    def cb_put_page(self):
+        '''BUF.cb_put_page()
 
         Callback function to release a page data object that was previously
-        returned by cb_get_page().'''
-        pass
+        returned by CTX.cb_get_page().'''
+        self.data = None
 
 ###
 ### addrxlat_fulladdr_t
