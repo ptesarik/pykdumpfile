@@ -276,11 +276,11 @@ class TestMethod(unittest.TestCase):
 
         with self.assertRaisesRegex(TypeError, 'has no len()'):
             meth.tbl = None
-        with self.assertRaisesRegex(TypeError, 'not iterable'):
+        with self.assertRaisesRegex(TypeError, 'no(n-|t )iterable'):
             meth.tbl = (None,)
         with self.assertRaisesRegex(TypeError, 'has no len()'):
             meth.tbl = 1
-        with self.assertRaisesRegex(TypeError, 'not iterable'):
+        with self.assertRaisesRegex(TypeError, 'no(n-|t )iterable'):
             meth.tbl = (1,)
         with self.assertRaisesRegex(ValueError, 'not enough values to unpack'):
             meth.tbl = ((),)
