@@ -107,6 +107,30 @@ class Context(object):
         if status != OK:
             raise get_exception(status, self.get_err())
 
+    def read(self, addrspace, address, size):
+        '''CTX.read(addrspace, address, size) -> buffer
+
+        Read decoded binary data from a starting address.'''
+        buf = ffi.new('char[]', size)
+        rd = ffi.new('size_t*')
+        rd[0] = size
+        status = C.kdump_read(self._cdata, addrspace, address, buf, rd)
+        if status != OK:
+                raise get_exception(status, self.get_err())
+        return ffi.buffer(buf)
+
+    def read_string(self, addrspace, addr):
+        '''CTX.read(addrspace, address, size) -> bytes
+
+        Read a NUL-terminated string from an address.'''
+        pstr = ffi.new('char**')
+        status = C.kdump_read_string(self._cdata, addrspace, addr, pstr)
+        if status != OK:
+                raise get_exception(status, self.get_err())
+        ret = ffi.string(pstr[0])
+        C.free(pstr[0])
+        return ret
+
     @property
     def attr(self):
         '''Access to libkdumpfile attributes'''
