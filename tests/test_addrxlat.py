@@ -71,6 +71,30 @@ class TestFullAddress(unittest.TestCase):
         addr2 = addr1.copy()
         self.assertIsInstance(addr2, myfulladdr)
 
+class TestPTE(unittest.TestCase):
+    names = (
+	'PTE_NONE',
+	'PTE_PFN32',
+	'PTE_PFN64',
+	'PTE_AARCH64',
+	'PTE_IA32',
+	'PTE_IA32_PAE',
+	'PTE_X86_64',
+	'PTE_S390X',
+	'PTE_PPC64_LINUX_RPN30',
+	'PTE_AARCH64_LPA',
+	'PTE_AARCH64_LPA2',
+	'PTE_ARM',
+    )
+
+    def test_pte_format_name(self):
+        for name in self.names:
+            fmt = addrxlat.__dict__[name]
+            libname = addrxlat.pte_format_name(fmt)
+            self.assertEqual(libname, name[4:].lower())
+            libfmt = addrxlat.pte_format(libname)
+            self.assertEqual(libfmt, fmt)
+
 class TestContext(unittest.TestCase):
     def test_err(self):
         ctx = addrxlat.Context()

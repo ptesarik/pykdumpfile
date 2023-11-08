@@ -40,6 +40,18 @@ def CAPS(addrspace):
     Translate an address space constant into a capability bitmask.'''
     return C.ADDRXLAT_CAPS(addrspace)
 
+def pte_format_name(fmt):
+    '''pte_format_name(fmt) -> name
+
+    Return the name of a PTE format constant.'''
+    return utils.to_unicode(ffi.string(C.addrxlat_pte_format_name(fmt)))
+
+def pte_format(name):
+    '''pte_format(name) -> fmt
+
+    Return the PTE format constant by name.'''
+    return C.addrxlat_pte_format(utils.to_bytes(name))
+
 def pteval_shift(fmt):
     '''pteval_shift(fmt) -> bit shift
 
