@@ -1,6 +1,8 @@
 '''kdumpfile.objects
 '''
 
+from collections.abc import MutableMapping
+
 from _kdumpfile import ffi, lib as C
 
 from .constants import *
@@ -133,7 +135,7 @@ class attr_ref(object):
     def __del__(self):
         C.kdump_attr_unref(self._ctx._cdata, self._cdata)
 
-class attr_dir(attr_ref):
+class attr_dir(attr_ref, MutableMapping):
     '''Attribute directory'''
 
     # After initialization, this object's attributes become frozen
@@ -141,7 +143,8 @@ class attr_dir(attr_ref):
     __frozen = False
 
     def __init__(self, ctx, key, base=None):
-        super().__init__(ctx, key, base)
+        attr_ref.__init__(self, ctx, key, base)
+        MutableMapping.__init__(self)
         self.__frozen = True
 
     def __contains__(self, k):
@@ -151,18 +154,17 @@ class attr_dir(attr_ref):
         except NoKeyError:
             return False
 
-    def get(self, k, d=None):
-        '''D.get(k[,d]) -> D[k] if k in D, else d.  d defaults to None.'''
+    def __getitem__(self, k):
         try:
             ref = attr_ref(self._ctx, k, self)
         except NoKeyError:
-            return d
+            raise KeyError(k)
         if C.kdump_attr_ref_type(ref._cdata) == DIRECTORY:
             return attr_dir(self._ctx, None, ref)
         v = ffi.new('kdump_attr_t *')
         status = C.kdump_attr_ref_get(self._ctx._cdata, ref._cdata, v)
         if status == ERR_NODATA:
-            return None
+            raise KeyError(k)
         elif status != OK:
             raise get_exception(status, self._ctx.get_err())
         t = v[0].type
@@ -178,12 +180,6 @@ class attr_dir(attr_ref):
             return Blob(v[0].val.blob)
         else:
             raise NotImplementedError('Unknown attribute type: {}'.format(t))
-
-    def __getitem__(self, k):
-        v = self.get(k)
-        if v is None:
-            raise KeyError(k)
-        return v
 
     def __setitem__(self, k, v):
         ref = attr_ref(self._ctx, k, self)
@@ -205,6 +201,9 @@ class attr_dir(attr_ref):
         status = C.kdump_attr_ref_set(self._ctx._cdata, ref._cdata, attr)
         if status != OK:
             raise get_exception(status, self._ctx.get_err())
+
+    def __delitem__(self, k):
+        self.__setitem(k, None)
 
     def __getattr__(self, k):
         try:
@@ -234,6 +233,19 @@ class attr_dir(attr_ref):
             status = C.kdump_attr_iter_next(self._ctx._cdata, it)
             if status != OK:
                 raise get_exception(status, self._ctx.get_err())
+
+    def __len__(self):
+        it = ffi.new('kdump_attr_iter_t *')
+        status = C.kdump_attr_ref_iter_start(self._ctx._cdata, self._cdata, it);
+        if status != OK:
+            raise get_exception(status, self._ctx.get_err())
+        length = 0
+        while it[0].key:
+            length += 1
+            status = C.kdump_attr_iter_next(self._ctx._cdata, it)
+            if status != OK:
+                raise get_exception(status, self._ctx.get_err())
+        return length
 
 ###
 ### kdump_bmp_t
