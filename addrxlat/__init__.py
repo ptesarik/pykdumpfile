@@ -58,10 +58,3 @@ def pteval_shift(fmt):
     Get the pteval shift for a PTE format.
     See PTE_xxx for valid values of fmt.'''
     return C.addrxlat_pteval_shift(fmt)
-
-def sym_argc(type):
-    '''sym_argc(type) -> number of arguments
-
-    Get the number of arguments for a given type of symbolic info.
-    See SYM_xxx for valid values of type.'''
-    return C.addrxlat_sym_argc(type)
