@@ -131,6 +131,40 @@ class Context(object):
         C.free(pstr[0])
         return ret
 
+    def vmcoreinfo_raw(self):
+        '''CTX.vmcoreinfo_raw() -> raw bytes
+
+        Get the raw VMCOREINFO string.'''
+        raw = ffi.new('char**')
+        status = C.kdump_vmcoreinfo_raw(self._cdata, raw)
+        if status != OK:
+                raise get_exception(status, self.get_err())
+        ret = ffi.string(raw[0])
+        C.free(raw[0])
+        return ret
+
+    def vmcoreinfo_line(self, key):
+        '''CTX.vmcoreinfo_line(key) -> bytes
+
+        Get the raw VMCOREINFO value by full key name.'''
+        val = ffi.new('char**')
+        status = C.kdump_vmcoreinfo_line(self._cdata, utils.to_bytes(key), val)
+        if status != OK:
+                raise get_exception(status, self.get_err())
+        ret = ffi.string(val[0])
+        C.free(val[0])
+        return ret
+
+    def vmcoreinfo_symbol(self, name):
+        '''CTX.vmcoreinfo_symbol(name) -> value
+
+        Get SYMBOL value from VMCOREINFO.'''
+        val = ffi.new('kdump_addr_t*')
+        status = C.kdump_vmcoreinfo_symbol(self._cdata, utils.to_bytes(name), val)
+        if status != OK:
+                raise get_exception(status, self.get_err())
+        return val[0]
+
     @property
     def attr(self):
         '''Access to libkdumpfile attributes'''
