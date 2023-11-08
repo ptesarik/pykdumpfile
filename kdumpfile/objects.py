@@ -79,6 +79,23 @@ class Context(object):
         '''CTX.d64toh(val) -> 64-bit value in host byte order'''
         return C.kdump_d64toh(self._cdata, val)
 
+    def open_fd(self, fd):
+        '''CTX.open_fd(fd)
+
+        Associate this context with a dump file using its file descriptor.'''
+        status = C.kdump_open_fd(self._cdata, fd)
+        if status != OK:
+            raise get_exception(status, self.get_err())
+
+    def open_fdset(self, *fdset):
+        '''CTX.open_fdset(fd...)
+
+        Associate this context with a set of dump files using their file descriptors.'''
+        fds = ffi.new('int[]', fdset)
+        status = C.kdump_open_fdset(self._cdata, len(fdset), fds)
+        if status != OK:
+            raise get_exception(status, self.get_err())
+
     def open(self, path):
         '''CTX.open(path)
 
