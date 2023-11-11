@@ -81,6 +81,24 @@ class Context(object):
         '''CTX.d64toh(val) -> 64-bit value in host byte order'''
         return C.kdump_d64toh(self._cdata, val)
 
+    def set_filename(self, name):
+        '''CTX.set_filename(name)
+
+        Provide a descriptive name for a single-file dump.'''
+        status = C.kdump_set_filename(self._cdata, utils.to_bytes(name))
+        if status != OK:
+            raise get_exception(status, self.get_err())
+
+    def set_filenames(self, *names):
+        '''CTX.set_filenames(name...)
+
+        Provide descriptive names for each file in a set of dump files.'''
+        names = tuple(ffi.new('char[]', utils.to_bytes(n)) for n in names)
+        array = ffi.new('char*[]', names)
+        status = C.kdump_set_filenames(self._cdata, len(names), array)
+        if status != OK:
+            raise get_exception(status, self.get_err())
+
     def open_fd(self, fd):
         '''CTX.open_fd(fd)
 

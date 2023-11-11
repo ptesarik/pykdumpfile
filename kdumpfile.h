@@ -27,7 +27,7 @@
 
 /* The rest of this file is adapted from the public header.
  * Matching libkdumpfile commit:
- * 2430f0968bb5b8c628142fe545b22cbedadacdf5
+ * bd368790290c8b6fb9e6519ae1dd3988068e078c
  */
 
 #define KDUMPFILE_VER_MAJOR	...
@@ -104,6 +104,10 @@ kdump_status kdump_get_addrxlat(kdump_ctx_t *ctx,
 uint_fast16_t kdump_d16toh(kdump_ctx_t *ctx, uint_fast16_t val);
 uint_fast32_t kdump_d32toh(kdump_ctx_t *ctx, uint_fast32_t val);
 uint_fast64_t kdump_d64toh(kdump_ctx_t *ctx, uint_fast64_t val);
+
+kdump_status kdump_set_filenames(kdump_ctx_t *ctx, unsigned n,
+				 const char *const *names);
+kdump_status kdump_set_filename(kdump_ctx_t *ctx, const char *name);
 
 kdump_status kdump_open_fdset(kdump_ctx_t *ctx, unsigned nfds, const int *fds);
 kdump_status kdump_open_fd(kdump_ctx_t *ctx, int fd);
