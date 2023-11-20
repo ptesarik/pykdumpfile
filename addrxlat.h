@@ -27,7 +27,7 @@
 
 /* The rest of this file is adapted from the public header.
  * Matching libkdumpfile commit:
- * 2430f0968bb5b8c628142fe545b22cbedadacdf5
+ * 82f1795d9589706b1b8df338eb4a7dbd8180daba
  */
 
 #define ADDRXLAT_VER_MAJOR	...
@@ -180,6 +180,8 @@ typedef enum _addrxlat_pte_format {
 	ADDRXLAT_PTE_AARCH64_LPA,
 	ADDRXLAT_PTE_AARCH64_LPA2,
 	ADDRXLAT_PTE_ARM,
+	ADDRXLAT_PTE_RISCV32,
+	ADDRXLAT_PTE_RISCV64,
 } addrxlat_pte_format_t;
 
 const char *addrxlat_pte_format_name(addrxlat_pte_format_t fmt);
