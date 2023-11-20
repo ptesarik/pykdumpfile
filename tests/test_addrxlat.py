@@ -1,5 +1,3 @@
-#!/usr/bin/python3
-
 import unittest
 import addrxlat
 import sys
