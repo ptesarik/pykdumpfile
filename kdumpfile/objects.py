@@ -243,19 +243,22 @@ class attr_dir(attr_ref, MutableMapping):
             raise KeyError(k)
         elif status != OK:
             raise get_exception(status, self._ctx.get_err())
-        t = v[0].type
-        if t == NUMBER:
-            return v[0].val.number
-        elif t == ADDRESS:
-            return v[0].val.address
-        elif t == STRING:
-            return utils.to_unicode(ffi.string(v[0].val.string))
-        elif t == BITMAP:
-            return Bitmap(v[0].val.bitmap)
-        elif t == BLOB:
-            return Blob(v[0].val.blob)
-        else:
-            raise NotImplementedError('Unknown attribute type: {}'.format(t))
+        try:
+            t = v[0].type
+            if t == NUMBER:
+                return v[0].val.number
+            elif t == ADDRESS:
+                return v[0].val.address
+            elif t == STRING:
+                return utils.to_unicode(ffi.string(v[0].val.string))
+            elif t == BITMAP:
+                return Bitmap(v[0].val.bitmap)
+            elif t == BLOB:
+                return Blob(v[0].val.blob)
+            else:
+                raise NotImplementedError('Unknown attribute type: {}'.format(t))
+        finally:
+            C.kdump_attr_discard(self._ctx._cdata, v)
 
     def __setitem__(self, k, v):
         ref = attr_ref(self._ctx, k, self)
