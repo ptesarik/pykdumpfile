@@ -27,7 +27,7 @@
 
 /* The rest of this file is adapted from the public header.
  * Matching libkdumpfile commit:
- * bd368790290c8b6fb9e6519ae1dd3988068e078c
+ * 5b044292abe9cbfed0d33f2acf1ed1f43e1364f8
  */
 
 #define KDUMPFILE_VER_MAJOR	...
@@ -189,7 +189,8 @@ kdump_status kdump_clear_attr(kdump_ctx_t *ctx, const char *key);
 kdump_status kdump_get_attr(kdump_ctx_t *ctx, const char *key,
 			    kdump_attr_t *valp);
 kdump_status kdump_get_typed_attr(kdump_ctx_t *ctx, const char *key,
-				  kdump_attr_t *valp);
+				  kdump_attr_type_t type,
+				  kdump_attr_value_t *valp);
 kdump_status kdump_get_number_attr(kdump_ctx_t *ctx, const char *key, kdump_num_t *num);
 kdump_status kdump_get_address_attr(kdump_ctx_t *ctx, const char *key, kdump_addr_t *addr);
 kdump_status kdump_get_string_attr(kdump_ctx_t *ctx, const char *key, const char **str);
@@ -202,6 +203,7 @@ kdump_attr_type_t kdump_attr_ref_type(kdump_attr_ref_t *ref);
 int kdump_attr_ref_isset(kdump_attr_ref_t *ref);
 kdump_status kdump_attr_ref_get(kdump_ctx_t *ctx, const kdump_attr_ref_t *ref,
 				kdump_attr_t *valp);
+void kdump_attr_discard(kdump_ctx_t *ctx, kdump_attr_t *attr);
 kdump_status kdump_attr_ref_set(kdump_ctx_t *ctx, kdump_attr_ref_t *ref,
 				const kdump_attr_t *valp);
 kdump_status kdump_set_sub_attr(kdump_ctx_t *ctx, const kdump_attr_ref_t *base,
