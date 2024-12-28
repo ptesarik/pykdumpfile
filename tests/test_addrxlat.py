@@ -83,6 +83,8 @@ class TestPTE(unittest.TestCase):
 	'PTE_AARCH64_LPA',
 	'PTE_AARCH64_LPA2',
 	'PTE_ARM',
+        'PTE_RISCV32',
+        'PTE_RISCV64',
     )
 
     def test_pte_format_name(self):
