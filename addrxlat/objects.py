@@ -345,9 +345,15 @@ class Buffer(object):
 
         self._cdata = ptr
         self._handle = ffi.new_handle(self)
+        self._orig_put_page = self._cdata.put_page
+        self._orig_priv = self._cdata.priv
         self._cdata.put_page = C._cb_put_page
         self._cdata.priv = self._handle
         self._data = None
+
+    def __del__(self):
+        self._cdata.put_page = self._orig_put_page
+        self._cdata.priv = self._orig_priv
 
     @property
     def addr(self):
